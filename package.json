@@ -1,0 +1,8 @@
+{
+  "name": "secureloginauth",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {},
+  "packageManager": "pnpm@12.14.0"
+}
