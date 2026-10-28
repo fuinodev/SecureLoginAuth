@@ -27,3 +27,22 @@ Error Details
 Failure Location
 
 • File: C:\SecureLoginAuth\apps\api\src\auth\auth.service.ts
+
+2. Argon2id Verification
+
+is_argon2id | hash_length
+------------+------------
+f           | 97
+
+Issue:
+The verification returned f (false).
+
+Reason:
+There is a mistake in the verification command I provided. LEFT(password_hash, 9) instead of LEFT(password_hash, 10)
+
+Solution:
+LEFT(password_hash, 9) not LEFT(password_hash, 10)
+
+
+
+
