@@ -44,5 +44,20 @@ Solution:
 LEFT(password_hash, 9) not LEFT(password_hash, 10)
 
 
+3. Diagnose the Duplicate Email Test
 
+Issue
+We expected HTTP 409 Conflict, but PowerShell displayed 0.
+
+Reason
+This does not necessarily mean your backend returned HTTP 0.
+
+The value 0 can appear when PowerShell cannot retrieve a valid HTTP status from the exception. For example, the request might have failed because the backend was unreachable.
+
+We need to distinguish a connection failure from an actual HTTP error.
+
+Solution — Inspect the PowerShell exception
+Let's run one small diagnostic command.
+
+Finding the server aren't start yet.
 
