@@ -3,6 +3,8 @@ import {
   BadRequestException,
   Body,
   Controller,
+  HttpCode,
+  HttpStatus,
   Post,
 } from '@nestjs/common';
 
@@ -29,16 +31,17 @@ export class AuthController {
   }
 
   @Post('login')
- login(@Body() body: unknown) {
-  const result = loginSchema.safeParse(body);
+  @HttpCode(HttpStatus.OK)
+  login(@Body() body: unknown) {
+    const result = loginSchema.safeParse(body);
 
-  if (!result.success) {
-    throw new BadRequestException({
-      message: 'Invalid login data',
-      errors: result.error.flatten(),
-    });
+    if (!result.success) {
+      throw new BadRequestException({
+        message: 'Invalid login data',
+        errors: result.error.flatten(),
+      });
+    }
+
+    return this.authService.login(result.data);
   }
-
-  return this.authService.login(result.data);
-   }
 }
