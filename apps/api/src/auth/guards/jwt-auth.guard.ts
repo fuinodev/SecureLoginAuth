@@ -17,6 +17,9 @@ export class JwtAuthGuard implements CanActivate {
       headers: {
         authorization?: string;
       };
+      user?: {
+        id: string;
+      };
     }>();
 
     const authorization = request.headers.authorization;
@@ -37,6 +40,10 @@ export class JwtAuthGuard implements CanActivate {
       if (typeof payload.sub !== 'string' || !payload.sub) {
         throw new UnauthorizedException('Invalid token payload');
       }
+
+      request.user = {
+        id: payload.sub,
+      };
 
       return true;
     } catch {

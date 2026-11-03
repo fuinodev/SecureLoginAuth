@@ -1,4 +1,3 @@
-
 import {
   BadRequestException,
   Body,
@@ -7,6 +6,7 @@ import {
   HttpCode,
   HttpStatus,
   Post,
+  Req,
   UseGuards,
 } from '@nestjs/common';
 
@@ -50,9 +50,10 @@ export class AuthController {
 
   @Get('protected')
   @UseGuards(JwtAuthGuard)
-  getProtected() {
+  getProtected(@Req() request: { user: { id: string } }) {
     return {
       message: 'You have accessed a protected endpoint!',
+      userId: request.user.id,
     };
   }
 }
