@@ -3,12 +3,15 @@ import {
   BadRequestException,
   Body,
   Controller,
+  Get,
   HttpCode,
   HttpStatus,
   Post,
+  UseGuards,
 } from '@nestjs/common';
 
 import { AuthService } from './auth.service.js';
+import { JwtAuthGuard } from './guards/jwt-auth.guard.js';
 import { registerSchema } from './schemas/register.schema.js';
 import { loginSchema } from './schemas/login.schema.js';
 
@@ -43,5 +46,13 @@ export class AuthController {
     }
 
     return this.authService.login(result.data);
+  }
+
+  @Get('protected')
+  @UseGuards(JwtAuthGuard)
+  getProtected() {
+    return {
+      message: 'You have accessed a protected endpoint!',
+    };
   }
 }
