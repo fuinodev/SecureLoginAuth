@@ -1,14 +1,16 @@
+
 import {
   ConflictException,
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
 
+import { JwtService } from '@nestjs/jwt';
 import * as argon2 from 'argon2';
+
 import { PrismaService } from '../prisma/prisma.service.js';
 import type { RegisterInput } from './schemas/register.schema.js';
 import type { LoginInput } from './schemas/login.schema.js';
-import { JwtService } from '@nestjs/jwt';
 
 @Injectable()
 export class AuthService {
@@ -17,6 +19,7 @@ export class AuthService {
     private readonly jwtService: JwtService,
   ) {}
 
+  // REGISTER USER
   async register(input: RegisterInput) {
     const email = input.email.toLowerCase();
 
@@ -45,23 +48,34 @@ export class AuthService {
         user,
       };
     } catch (error) {
-      if (error instanceof Error && 'code' in error && error.code === 'P2002') {
-        throw new ConflictException('Email is already registered');
+      if (
+        error instanceof Error &&
+        'code' in error &&
+        error.code === 'P2002'
+      ) {
+        throw new ConflictException(
+          'Email is already registered',
+        );
       }
 
       throw error;
     }
   }
 
+  // LOGIN USER
   async login(input: LoginInput) {
     const email = input.email.toLowerCase();
 
     const user = await this.prisma.user.findUnique({
-      where: { email },
+      where: {
+        email,
+      },
     });
 
     if (!user) {
-      throw new UnauthorizedException('Invalid email or password');
+      throw new UnauthorizedException(
+        'Invalid email or password',
+      );
     }
 
     const passwordMatches = await argon2.verify(
@@ -70,7 +84,9 @@ export class AuthService {
     );
 
     if (!passwordMatches) {
-      throw new UnauthorizedException('Invalid email or password');
+      throw new UnauthorizedException(
+        'Invalid email or password',
+      );
     }
 
     const accessToken = await this.jwtService.signAsync({
@@ -87,5 +103,27 @@ export class AuthService {
         email: user.email,
       },
     };
+  }
+
+  // GET AUTHENTICATED USER
+  async getCurrentUser(userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: {
+        id: userId,
+      },
+      select: {
+        id: true,
+        email: true,
+        createdAt: true,
+      },
+    });
+
+    if (!user) {
+      throw new UnauthorizedException(
+        'User account no longer exists',
+      );
+    }
+
+    return user;
   }
 }

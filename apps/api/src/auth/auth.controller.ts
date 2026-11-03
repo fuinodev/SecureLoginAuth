@@ -14,6 +14,8 @@ import { AuthService } from './auth.service.js';
 import { JwtAuthGuard } from './guards/jwt-auth.guard.js';
 import { registerSchema } from './schemas/register.schema.js';
 import { loginSchema } from './schemas/login.schema.js';
+import { CurrentUser } from './decorators/current-user.decorator.js';
+import type { AuthenticatedUser } from './types/authenticated-request.js';
 
 @Controller('auth')
 export class AuthController {
@@ -44,16 +46,22 @@ export class AuthController {
         errors: result.error.flatten(),
       });
     }
-
+    
     return this.authService.login(result.data);
   }
 
   @Get('protected')
   @UseGuards(JwtAuthGuard)
-  getProtected(@Req() request: { user: { id: string } }) {
+  getProtected(@CurrentUser() user: AuthenticatedUser) {
     return {
       message: 'You have accessed a protected endpoint!',
-      userId: request.user.id,
+      userId: user.id,
     };
+  }
+
+  @Get('me')
+  @UseGuards(JwtAuthGuard)
+  getMe(@CurrentUser() user: AuthenticatedUser) {
+    return this.authService.getCurrentUser(user.id);
   }
 }
