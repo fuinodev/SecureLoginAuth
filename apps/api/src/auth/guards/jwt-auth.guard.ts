@@ -7,14 +7,17 @@ import {
 } from '@nestjs/common';
 
 import { JwtService } from '@nestjs/jwt';
-import type { FastifyRequest } from 'fastify';
 
 @Injectable()
 export class JwtAuthGuard implements CanActivate {
   constructor(private readonly jwtService: JwtService) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
-    const request = context.switchToHttp().getRequest<FastifyRequest>();
+    const request = context.switchToHttp().getRequest<{
+      headers: {
+        authorization?: string;
+      };
+    }>();
 
     const authorization = request.headers.authorization;
 
