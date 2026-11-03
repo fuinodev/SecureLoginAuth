@@ -12,10 +12,10 @@ import { JwtService } from '@nestjs/jwt';
 
 @Injectable()
 export class AuthService {
-constructor(
-  private readonly prisma: PrismaService,
-  private readonly jwtService: JwtService,
-) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly jwtService: JwtService,
+  ) {}
 
   async register(input: RegisterInput) {
     const email = input.email.toLowerCase();
@@ -45,11 +45,7 @@ constructor(
         user,
       };
     } catch (error) {
-      if (
-        error instanceof Error &&
-        'code' in error &&
-        error.code === 'P2002'
-      ) {
+      if (error instanceof Error && 'code' in error && error.code === 'P2002') {
         throw new ConflictException('Email is already registered');
       }
 
@@ -77,8 +73,15 @@ constructor(
       throw new UnauthorizedException('Invalid email or password');
     }
 
+    const accessToken = await this.jwtService.signAsync({
+      sub: user.id,
+    });
+
     return {
       message: 'Login successful',
+      accessToken,
+      tokenType: 'Bearer',
+      expiresIn: 900,
       user: {
         id: user.id,
         email: user.email,
