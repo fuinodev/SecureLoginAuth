@@ -9,6 +9,7 @@ import { JwtService } from '@nestjs/jwt';
 import * as argon2 from 'argon2';
 
 import { PrismaService } from '../prisma/prisma.service.js';
+import { jwtExpiresInSeconds } from './config/jwt.config.js';
 import type { RegisterInput } from './schemas/register.schema.js';
 import type { LoginInput } from './schemas/login.schema.js';
 
@@ -97,7 +98,7 @@ export class AuthService {
       message: 'Login successful',
       accessToken,
       tokenType: 'Bearer',
-      expiresIn: 900,
+      expiresIn: jwtExpiresInSeconds,
       user: {
         id: user.id,
         email: user.email,
