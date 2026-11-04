@@ -5,6 +5,11 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 
+import {
+  generateRefreshToken,
+  hashRefreshToken,
+} from './utils/refresh-token.util.js';
+
 import { JwtService } from '@nestjs/jwt';
 import * as argon2 from 'argon2';
 
@@ -19,6 +24,25 @@ export class AuthService {
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
   ) {}
+
+  private async createRefreshSession(userId: string) {
+  const refreshToken = generateRefreshToken();
+  const refreshTokenHash = hashRefreshToken(refreshToken);
+
+  const expiresAt = new Date(
+    Date.now() + 7 * 24 * 60 * 60 * 1000,
+  );
+
+  await this.prisma.session.create({
+    data: {
+      userId,
+      refreshTokenHash,
+      expiresAt,
+    },
+  });
+
+  return refreshToken;
+}
 
   // REGISTER USER
   async register(input: RegisterInput) {
@@ -90,13 +114,19 @@ export class AuthService {
       );
     }
 
+    // Generate JWT access token
     const accessToken = await this.jwtService.signAsync({
       sub: user.id,
     });
 
+    // Create a refresh-token session in PostgreSQL
+    const refreshToken = await this.createRefreshSession(user.id);
+
+    // Return authentication response
     return {
       message: 'Login successful',
       accessToken,
+      refreshToken,
       tokenType: 'Bearer',
       expiresIn: jwtExpiresInSeconds,
       user: {
@@ -104,6 +134,7 @@ export class AuthService {
         email: user.email,
       },
     };
+
   }
 
   // GET AUTHENTICATED USER
@@ -126,5 +157,8 @@ export class AuthService {
     }
 
     return user;
+
+
+    
   }
 }
