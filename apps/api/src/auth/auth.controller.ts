@@ -15,6 +15,7 @@ import { registerSchema } from './schemas/register.schema.js';
 import { loginSchema } from './schemas/login.schema.js';
 import { CurrentUser } from './decorators/current-user.decorator.js';
 import type { AuthenticatedUser } from './types/authenticated-request.js';
+import { refreshSchema } from './schemas/refresh.schema.js';
 
 @Controller('auth')
 export class AuthController {
@@ -33,22 +34,21 @@ export class AuthController {
 
     return this.authService.register(result.data);
   }
-
-  @Post('login')
+  // REFRESH ACCESS TOKEN
+  @Post('refresh')
   @HttpCode(HttpStatus.OK)
-  login(@Body() body: unknown) {
-    const result = loginSchema.safeParse(body);
+  refresh(@Body() body: unknown) {
+    const result = refreshSchema.safeParse(body);
 
     if (!result.success) {
       throw new BadRequestException({
-        message: 'Invalid login data',
+        message: 'Invalid refresh token data',
         errors: result.error.flatten(),
       });
     }
-    
-    return this.authService.login(result.data);
-  }
 
+    return this.authService.refreshAccessToken(result.data);
+  }
   @Get('protected')
   @UseGuards(JwtAuthGuard)
   getProtected(@CurrentUser() user: AuthenticatedUser) {
