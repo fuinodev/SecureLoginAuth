@@ -1,3 +1,4 @@
+
 import {
   BadRequestException,
   Body,
@@ -11,16 +12,19 @@ import {
 
 import { AuthService } from './auth.service.js';
 import { JwtAuthGuard } from './guards/jwt-auth.guard.js';
+
 import { registerSchema } from './schemas/register.schema.js';
 import { loginSchema } from './schemas/login.schema.js';
+import { refreshSchema } from './schemas/refresh.schema.js';
+
 import { CurrentUser } from './decorators/current-user.decorator.js';
 import type { AuthenticatedUser } from './types/authenticated-request.js';
-import { refreshSchema } from './schemas/refresh.schema.js';
 
 @Controller('auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
+  // REGISTER USER
   @Post('register')
   register(@Body() body: unknown) {
     const result = registerSchema.safeParse(body);
@@ -34,6 +38,23 @@ export class AuthController {
 
     return this.authService.register(result.data);
   }
+
+  // LOGIN USER
+  @Post('login')
+  @HttpCode(HttpStatus.OK)
+  login(@Body() body: unknown) {
+    const result = loginSchema.safeParse(body);
+
+    if (!result.success) {
+      throw new BadRequestException({
+        message: 'Invalid login data',
+        errors: result.error.flatten(),
+      });
+    }
+
+    return this.authService.login(result.data);
+  }
+
   // REFRESH ACCESS TOKEN
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
@@ -49,6 +70,8 @@ export class AuthController {
 
     return this.authService.refreshAccessToken(result.data);
   }
+
+  // PROTECTED TEST ENDPOINT
   @Get('protected')
   @UseGuards(JwtAuthGuard)
   getProtected(@CurrentUser() user: AuthenticatedUser) {
@@ -58,6 +81,7 @@ export class AuthController {
     };
   }
 
+  // GET AUTHENTICATED USER
   @Get('me')
   @UseGuards(JwtAuthGuard)
   getMe(@CurrentUser() user: AuthenticatedUser) {
