@@ -13,6 +13,7 @@ import { jwtExpiresInSeconds } from './config/jwt.config.js';
 
 import type { RegisterInput } from './schemas/register.schema.js';
 import type { LoginInput } from './schemas/login.schema.js';
+import type { RefreshInput } from './schemas/refresh.schema.js';
 
 import {
   generateRefreshToken,
@@ -45,7 +46,6 @@ export class AuthService {
       },
     });
 
-    // Return the original token to the caller
     return refreshToken;
   }
 
@@ -124,7 +124,7 @@ export class AuthService {
       sub: user.id,
     });
 
-    // Generate refresh token and save session
+    // Create a refresh-token session
     const refreshToken = await this.createRefreshSession(user.id);
 
     return {
@@ -137,6 +137,74 @@ export class AuthService {
         id: user.id,
         email: user.email,
       },
+    };
+  }
+
+  // ROTATE REFRESH TOKEN
+  async refreshAccessToken(input: RefreshInput) {
+    const currentTokenHash = hashRefreshToken(
+      input.refreshToken,
+    );
+
+    // Find the session associated with the token
+    const session = await this.prisma.session.findUnique({
+      where: {
+        refreshTokenHash: currentTokenHash,
+      },
+      select: {
+        id: true,
+        userId: true,
+      },
+    });
+
+    if (!session) {
+      throw new UnauthorizedException(
+        'Invalid or expired refresh token',
+      );
+    }
+
+    // Generate replacement refresh token
+    const newRefreshToken = generateRefreshToken();
+    const newRefreshTokenHash = hashRefreshToken(
+      newRefreshToken,
+    );
+
+    const now = new Date();
+
+    // Atomically rotate the stored token hash
+    const rotation = await this.prisma.session.updateMany({
+      where: {
+        id: session.id,
+        refreshTokenHash: currentTokenHash,
+        revokedAt: null,
+        expiresAt: {
+          gt: now,
+        },
+      },
+      data: {
+        refreshTokenHash: newRefreshTokenHash,
+        expiresAt: new Date(
+          now.getTime() + 7 * 24 * 60 * 60 * 1000,
+        ),
+      },
+    });
+
+    if (rotation.count !== 1) {
+      throw new UnauthorizedException(
+        'Invalid or expired refresh token',
+      );
+    }
+
+    // Generate a new JWT access token
+    const accessToken = await this.jwtService.signAsync({
+      sub: session.userId,
+    });
+
+    return {
+      accessToken,
+      refreshToken: newRefreshToken,
+      tokenType: 'Bearer',
+      expiresIn: jwtExpiresInSeconds,
     };
   }
 
