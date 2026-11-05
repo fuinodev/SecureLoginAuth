@@ -1,4 +1,3 @@
-
 import {
   BadRequestException,
   Body,
@@ -69,6 +68,23 @@ export class AuthController {
     }
 
     return this.authService.refreshAccessToken(result.data);
+  }
+
+  // LOGOUT USER
+  @Post('logout')
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(JwtAuthGuard)
+  logout(@CurrentUser() user: AuthenticatedUser, @Body() body: unknown) {
+    const result = refreshSchema.safeParse(body);
+
+    if (!result.success) {
+      throw new BadRequestException({
+        message: 'Invalid logout data',
+        errors: result.error.flatten(),
+      });
+    }
+
+    return this.authService.logout(user.id, result.data);
   }
 
   // PROTECTED TEST ENDPOINT
