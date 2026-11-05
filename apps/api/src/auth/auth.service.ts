@@ -5,18 +5,19 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 
-import {
-  generateRefreshToken,
-  hashRefreshToken,
-} from './utils/refresh-token.util.js';
-
 import { JwtService } from '@nestjs/jwt';
 import * as argon2 from 'argon2';
 
 import { PrismaService } from '../prisma/prisma.service.js';
 import { jwtExpiresInSeconds } from './config/jwt.config.js';
+
 import type { RegisterInput } from './schemas/register.schema.js';
 import type { LoginInput } from './schemas/login.schema.js';
+
+import {
+  generateRefreshToken,
+  hashRefreshToken,
+} from './utils/refresh-token.util.js';
 
 @Injectable()
 export class AuthService {
@@ -25,24 +26,28 @@ export class AuthService {
     private readonly jwtService: JwtService,
   ) {}
 
+  // CREATE REFRESH TOKEN SESSION
   private async createRefreshSession(userId: string) {
-  const refreshToken = generateRefreshToken();
-  const refreshTokenHash = hashRefreshToken(refreshToken);
+    const refreshToken = generateRefreshToken();
+    const refreshTokenHash = hashRefreshToken(refreshToken);
 
-  const expiresAt = new Date(
-    Date.now() + 7 * 24 * 60 * 60 * 1000,
-  );
+    // Refresh token expires after 7 days
+    const expiresAt = new Date(
+      Date.now() + 7 * 24 * 60 * 60 * 1000,
+    );
 
-  await this.prisma.session.create({
-    data: {
-      userId,
-      refreshTokenHash,
-      expiresAt,
-    },
-  });
+    // Store only the token hash in PostgreSQL
+    await this.prisma.session.create({
+      data: {
+        userId,
+        refreshTokenHash,
+        expiresAt,
+      },
+    });
 
-  return refreshToken;
-}
+    // Return the original token to the caller
+    return refreshToken;
+  }
 
   // REGISTER USER
   async register(input: RegisterInput) {
@@ -119,10 +124,9 @@ export class AuthService {
       sub: user.id,
     });
 
-    // Create a refresh-token session in PostgreSQL
+    // Generate refresh token and save session
     const refreshToken = await this.createRefreshSession(user.id);
 
-    // Return authentication response
     return {
       message: 'Login successful',
       accessToken,
@@ -134,7 +138,6 @@ export class AuthService {
         email: user.email,
       },
     };
-
   }
 
   // GET AUTHENTICATED USER
@@ -157,8 +160,5 @@ export class AuthService {
     }
 
     return user;
-
-
-    
   }
 }
