@@ -1,3 +1,4 @@
+
 import {
   BadRequestException,
   Body,
@@ -54,7 +55,7 @@ export class AuthController {
     return this.authService.login(result.data);
   }
 
-  // REFRESH ACCESS TOKEN
+  // ROTATE REFRESH TOKEN
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
   refresh(@Body() body: unknown) {
@@ -70,11 +71,14 @@ export class AuthController {
     return this.authService.refreshAccessToken(result.data);
   }
 
-  // LOGOUT USER
+  // LOGOUT USER (ONE SESSION)
   @Post('logout')
   @HttpCode(HttpStatus.OK)
   @UseGuards(JwtAuthGuard)
-  logout(@CurrentUser() user: AuthenticatedUser, @Body() body: unknown) {
+  logout(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() body: unknown,
+  ) {
     const result = refreshSchema.safeParse(body);
 
     if (!result.success) {
@@ -85,6 +89,14 @@ export class AuthController {
     }
 
     return this.authService.logout(user.id, result.data);
+  }
+
+  // LOGOUT FROM ALL DEVICES
+  @Post('logout-all')
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(JwtAuthGuard)
+  logoutAll(@CurrentUser() user: AuthenticatedUser) {
+    return this.authService.logoutAll(user.id);
   }
 
   // PROTECTED TEST ENDPOINT
