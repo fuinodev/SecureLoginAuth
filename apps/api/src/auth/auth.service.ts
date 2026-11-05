@@ -1,4 +1,3 @@
-
 import {
   ConflictException,
   Injectable,
@@ -33,9 +32,7 @@ export class AuthService {
     const refreshTokenHash = hashRefreshToken(refreshToken);
 
     // Refresh token expires after 7 days
-    const expiresAt = new Date(
-      Date.now() + 7 * 24 * 60 * 60 * 1000,
-    );
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
 
     // Store only the token hash in PostgreSQL
     await this.prisma.session.create({
@@ -78,14 +75,8 @@ export class AuthService {
         user,
       };
     } catch (error) {
-      if (
-        error instanceof Error &&
-        'code' in error &&
-        error.code === 'P2002'
-      ) {
-        throw new ConflictException(
-          'Email is already registered',
-        );
+      if (error instanceof Error && 'code' in error && error.code === 'P2002') {
+        throw new ConflictException('Email is already registered');
       }
 
       throw error;
@@ -103,9 +94,7 @@ export class AuthService {
     });
 
     if (!user) {
-      throw new UnauthorizedException(
-        'Invalid email or password',
-      );
+      throw new UnauthorizedException('Invalid email or password');
     }
 
     const passwordMatches = await argon2.verify(
@@ -114,9 +103,7 @@ export class AuthService {
     );
 
     if (!passwordMatches) {
-      throw new UnauthorizedException(
-        'Invalid email or password',
-      );
+      throw new UnauthorizedException('Invalid email or password');
     }
 
     // Generate JWT access token
@@ -142,9 +129,7 @@ export class AuthService {
 
   // ROTATE REFRESH TOKEN
   async refreshAccessToken(input: RefreshInput) {
-    const currentTokenHash = hashRefreshToken(
-      input.refreshToken,
-    );
+    const currentTokenHash = hashRefreshToken(input.refreshToken);
 
     // Find the session associated with the token
     const session = await this.prisma.session.findUnique({
@@ -158,16 +143,12 @@ export class AuthService {
     });
 
     if (!session) {
-      throw new UnauthorizedException(
-        'Invalid or expired refresh token',
-      );
+      throw new UnauthorizedException('Invalid or expired refresh token');
     }
 
     // Generate replacement refresh token
     const newRefreshToken = generateRefreshToken();
-    const newRefreshTokenHash = hashRefreshToken(
-      newRefreshToken,
-    );
+    const newRefreshTokenHash = hashRefreshToken(newRefreshToken);
 
     const now = new Date();
 
@@ -183,16 +164,12 @@ export class AuthService {
       },
       data: {
         refreshTokenHash: newRefreshTokenHash,
-        expiresAt: new Date(
-          now.getTime() + 7 * 24 * 60 * 60 * 1000,
-        ),
+        expiresAt: new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000),
       },
     });
 
     if (rotation.count !== 1) {
-      throw new UnauthorizedException(
-        'Invalid or expired refresh token',
-      );
+      throw new UnauthorizedException('Invalid or expired refresh token');
     }
 
     // Generate a new JWT access token
@@ -205,6 +182,36 @@ export class AuthService {
       refreshToken: newRefreshToken,
       tokenType: 'Bearer',
       expiresIn: jwtExpiresInSeconds,
+    };
+  }
+
+  // LOG OUT AND REVOKE REFRESH SESSION
+  async logout(userId: string, input: RefreshInput) {
+    const refreshTokenHash = hashRefreshToken(input.refreshToken);
+
+    const now = new Date();
+
+    // Revoke only a matching, active session owned by this user
+    const result = await this.prisma.session.updateMany({
+      where: {
+        userId,
+        refreshTokenHash,
+        revokedAt: null,
+        expiresAt: {
+          gt: now,
+        },
+      },
+      data: {
+        revokedAt: now,
+      },
+    });
+
+    if (result.count !== 1) {
+      throw new UnauthorizedException('Invalid or expired refresh token');
+    }
+
+    return {
+      message: 'Logout successful',
     };
   }
 
@@ -222,9 +229,7 @@ export class AuthService {
     });
 
     if (!user) {
-      throw new UnauthorizedException(
-        'User account no longer exists',
-      );
+      throw new UnauthorizedException('User account no longer exists');
     }
 
     return user;
