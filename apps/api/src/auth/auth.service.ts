@@ -268,6 +268,33 @@ export class AuthService {
     };
   }
 
+  // REVOKE A SELECTED SESSION
+  async revokeSession(userId: string, sessionId: string) {
+    const now = new Date();
+
+    const result = await this.prisma.session.updateMany({
+      where: {
+        id: sessionId,
+        userId,
+        revokedAt: null,
+        expiresAt: {
+          gt: now,
+        },
+      },
+      data: {
+        revokedAt: now,
+      },
+    });
+
+    if (result.count !== 1) {
+      throw new UnauthorizedException('Session not found or already revoked');
+    }
+
+    return {
+      message: 'Session revoked successfully',
+    };
+  }
+
   // GET AUTHENTICATED USER
   async getCurrentUser(userId: string) {
     const user = await this.prisma.user.findUnique({
