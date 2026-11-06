@@ -3,9 +3,12 @@ import {
   BadRequestException,
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
   HttpStatus,
+  Param,
+  ParseUUIDPipe,
   Post,
   UseGuards,
 } from '@nestjs/common';
@@ -103,7 +106,7 @@ export class AuthController {
     return this.authService.logoutAll(user.id);
   }
 
-  // GET ALL ACTIVE SESSIONS
+  // LIST ACTIVE SESSIONS
   @Get('sessions')
   @UseGuards(JwtAuthGuard)
   getActiveSessions(
@@ -112,6 +115,21 @@ export class AuthController {
     return this.authService.getActiveSessions(
       user.id,
       user.sessionId,
+    );
+  }
+
+  // REVOKE A SELECTED SESSION
+  @Delete('sessions/:sessionId')
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(JwtAuthGuard)
+  revokeSession(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('sessionId', new ParseUUIDPipe())
+    sessionId: string,
+  ) {
+    return this.authService.revokeSession(
+      user.id,
+      sessionId,
     );
   }
 
