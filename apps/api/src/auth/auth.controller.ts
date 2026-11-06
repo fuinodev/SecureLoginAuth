@@ -22,7 +22,9 @@ import type { AuthenticatedUser } from './types/authenticated-request.js';
 
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(
+    private readonly authService: AuthService,
+  ) {}
 
   // REGISTER USER
   @Post('register')
@@ -95,14 +97,30 @@ export class AuthController {
   @Post('logout-all')
   @HttpCode(HttpStatus.OK)
   @UseGuards(JwtAuthGuard)
-  logoutAll(@CurrentUser() user: AuthenticatedUser) {
+  logoutAll(
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
     return this.authService.logoutAll(user.id);
+  }
+
+  // GET ALL ACTIVE SESSIONS
+  @Get('sessions')
+  @UseGuards(JwtAuthGuard)
+  getActiveSessions(
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.authService.getActiveSessions(
+      user.id,
+      user.sessionId,
+    );
   }
 
   // PROTECTED TEST ENDPOINT
   @Get('protected')
   @UseGuards(JwtAuthGuard)
-  getProtected(@CurrentUser() user: AuthenticatedUser) {
+  getProtected(
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
     return {
       message: 'You have accessed a protected endpoint!',
       userId: user.id,
@@ -112,7 +130,9 @@ export class AuthController {
   // GET AUTHENTICATED USER
   @Get('me')
   @UseGuards(JwtAuthGuard)
-  getMe(@CurrentUser() user: AuthenticatedUser) {
+  getMe(
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
     return this.authService.getCurrentUser(user.id);
   }
 }
