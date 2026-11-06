@@ -32,21 +32,25 @@ export class AuthService {
     const refreshToken = generateRefreshToken();
     const refreshTokenHash = hashRefreshToken(refreshToken);
 
-    // Refresh token expires after 7 days
     const expiresAt = new Date(
       Date.now() + 7 * 24 * 60 * 60 * 1000,
     );
 
-    // Store only the token hash in PostgreSQL
-    await this.prisma.session.create({
+    const session = await this.prisma.session.create({
       data: {
         userId,
         refreshTokenHash,
         expiresAt,
       },
+      select: {
+        id: true,
+      },
     });
 
-    return refreshToken;
+    return {
+      refreshToken,
+      sessionId: session.id,
+    };
   }
 
   // REGISTER USER
@@ -119,13 +123,15 @@ export class AuthService {
       );
     }
 
-    // Generate JWT access token
+    // Create the database session first
+    const { refreshToken, sessionId } =
+      await this.createRefreshSession(user.id);
+
+    // Associate the access token with the session
     const accessToken = await this.jwtService.signAsync({
       sub: user.id,
+      sid: sessionId,
     });
-
-    // Create a refresh-token session
-    const refreshToken = await this.createRefreshSession(user.id);
 
     return {
       message: 'Login successful',
@@ -146,7 +152,6 @@ export class AuthService {
       input.refreshToken,
     );
 
-    // Find the session associated with the token
     const session = await this.prisma.session.findUnique({
       where: {
         refreshTokenHash: currentTokenHash,
@@ -163,7 +168,6 @@ export class AuthService {
       );
     }
 
-    // Generate replacement refresh token
     const newRefreshToken = generateRefreshToken();
     const newRefreshTokenHash = hashRefreshToken(
       newRefreshToken,
@@ -171,7 +175,6 @@ export class AuthService {
 
     const now = new Date();
 
-    // Atomically rotate the stored token hash
     const rotation = await this.prisma.session.updateMany({
       where: {
         id: session.id,
@@ -195,9 +198,10 @@ export class AuthService {
       );
     }
 
-    // Generate a new JWT access token
+    // Preserve the same session ID after token rotation
     const accessToken = await this.jwtService.signAsync({
       sub: session.userId,
+      sid: session.id,
     });
 
     return {
@@ -216,7 +220,6 @@ export class AuthService {
 
     const now = new Date();
 
-    // Revoke only a matching, active session owned by this user
     const result = await this.prisma.session.updateMany({
       where: {
         userId,
@@ -246,7 +249,6 @@ export class AuthService {
   async logoutAll(userId: string) {
     const now = new Date();
 
-    // Revoke all sessions belonging to the authenticated user
     const result = await this.prisma.session.updateMany({
       where: {
         userId,
