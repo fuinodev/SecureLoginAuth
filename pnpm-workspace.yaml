@@ -3,6 +3,7 @@ packages:
   - "apps/*"
   - "packages/*"
 allowBuilds:
+  '@parcel/watcher': set this to true or false
   '@prisma/engines': true
   argon2: true
   esbuild: true
