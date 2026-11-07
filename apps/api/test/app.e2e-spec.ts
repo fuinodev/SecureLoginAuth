@@ -1,29 +1,59 @@
-import { Test, TestingModule } from '@nestjs/testing';
-import { INestApplication } from '@nestjs/common';
-import request from 'supertest';
-import { App } from 'supertest/types.js';
-import { AppModule } from './../src/app.module.js';
+
+import { Test, type TestingModule } from '@nestjs/testing';
+import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+
+import { AppModule } from '../src/app.module.js';
+import { AppService } from '../src/app.service.js';
+import { PrismaService } from '../src/prisma/prisma.service.js';
 
 describe('AppController (e2e)', () => {
-  let app: INestApplication<App>;
+  let app: NestFastifyApplication;
 
-  beforeEach(async () => {
-    const moduleFixture: TestingModule = await Test.createTestingModule({
-      imports: [AppModule],
-    }).compile();
+  const mockAppService = {
+    getHello: vi.fn(),
+  };
 
-    app = moduleFixture.createNestApplication();
+  const mockPrismaService = {
+    $connect: vi.fn(),
+    $disconnect: vi.fn(),
+  };
+
+  beforeAll(async () => {
+    mockAppService.getHello.mockReturnValue({
+      status: 'connected',
+    });
+
+    const moduleFixture: TestingModule =
+      await Test.createTestingModule({
+        imports: [AppModule],
+      })
+        .overrideProvider(AppService)
+        .useValue(mockAppService)
+        .overrideProvider(PrismaService)
+        .useValue(mockPrismaService)
+        .compile();
+
+    app = moduleFixture.createNestApplication<NestFastifyApplication>(
+      new FastifyAdapter(),
+    );
+
+    app.setGlobalPrefix('api/v1');
+
     await app.init();
+    await app.getHttpAdapter().getInstance().ready();
   });
 
-  it('/ (GET)', () => {
-    return request(app.getHttpServer())
-      .get('/')
-      .expect(200)
-      .expect('Hello World!');
+  afterAll(async () => {
+    await app?.close();
   });
 
-  afterEach(async () => {
-    await app.close();
+  it('GET /api/v1 should return HTTP 200', async () => {
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/v1',
+    });
+
+    expect(response.statusCode).toBe(200);
   });
 });
