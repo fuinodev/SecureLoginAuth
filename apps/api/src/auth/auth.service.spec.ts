@@ -1,4 +1,3 @@
-
 import { Test, type TestingModule } from '@nestjs/testing';
 import { ConflictException, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
@@ -42,20 +41,19 @@ describe('AuthService', () => {
   beforeEach(async () => {
     vi.resetAllMocks();
 
-    const module: TestingModule =
-      await Test.createTestingModule({
-        providers: [
-          AuthService,
-          {
-            provide: PrismaService,
-            useValue: mockPrisma,
-          },
-          {
-            provide: JwtService,
-            useValue: mockJwtService,
-          },
-        ],
-      }).compile();
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        AuthService,
+        {
+          provide: PrismaService,
+          useValue: mockPrisma,
+        },
+        {
+          provide: JwtService,
+          useValue: mockJwtService,
+        },
+      ],
+    }).compile();
 
     service = module.get<AuthService>(AuthService);
   });
@@ -73,34 +71,25 @@ describe('AuthService', () => {
         password: validPassword,
       });
 
-      expect(result.message).toBe(
-        'User registered successfully',
-      );
+      expect(result.message).toBe('User registered successfully');
 
       expect(result.user.email).toBe(testUser.email);
 
-      const createArgs =
-        mockPrisma.user.create.mock.calls[0][0];
+      const createArgs = mockPrisma.user.create.mock.calls[0][0];
 
       expect(createArgs.data.email).toBe(testUser.email);
 
-      expect(createArgs.data.passwordHash).not.toBe(
-        validPassword,
-      );
+      expect(createArgs.data.passwordHash).not.toBe(validPassword);
 
       expect(
-        await argon2.verify(
-          createArgs.data.passwordHash,
-          validPassword,
-        ),
+        await argon2.verify(createArgs.data.passwordHash, validPassword),
       ).toBe(true);
     });
 
     it('should reject duplicate emails', async () => {
-      const prismaError = Object.assign(
-        new Error('Unique constraint failed'),
-        { code: 'P2002' },
-      );
+      const prismaError = Object.assign(new Error('Unique constraint failed'), {
+        code: 'P2002',
+      });
 
       mockPrisma.user.create.mockRejectedValue(prismaError);
 
@@ -126,9 +115,7 @@ describe('AuthService', () => {
         id: 'session-123',
       });
 
-      mockJwtService.signAsync.mockResolvedValue(
-        'mock-access-token',
-      );
+      mockJwtService.signAsync.mockResolvedValue('mock-access-token');
 
       const result = await service.login({
         email: 'TEST@example.com',
@@ -137,9 +124,7 @@ describe('AuthService', () => {
 
       expect(result.message).toBe('Login successful');
       expect(result.accessToken).toBe('mock-access-token');
-      expect(result.refreshToken).toEqual(
-        expect.any(String),
-      );
+      expect(result.refreshToken).toEqual(expect.any(String));
       expect(result.tokenType).toBe('Bearer');
       expect(result.expiresIn).toBe(jwtExpiresInSeconds);
 
@@ -193,9 +178,7 @@ describe('AuthService', () => {
         id: 'session-456',
       });
 
-      mockJwtService.signAsync.mockResolvedValue(
-        'mock-access-token',
-      );
+      mockJwtService.signAsync.mockResolvedValue('mock-access-token');
 
       await service.login({
         email: testUser.email,
@@ -222,9 +205,7 @@ describe('AuthService', () => {
         count: 1,
       });
 
-      mockJwtService.signAsync.mockResolvedValue(
-        'new-access-token',
-      );
+      mockJwtService.signAsync.mockResolvedValue('new-access-token');
 
       const result = await service.refreshAccessToken({
         refreshToken: oldRefreshToken,
@@ -232,9 +213,7 @@ describe('AuthService', () => {
 
       expect(result.accessToken).toBe('new-access-token');
 
-      expect(result.refreshToken).not.toBe(
-        oldRefreshToken,
-      );
+      expect(result.refreshToken).not.toBe(oldRefreshToken);
 
       expect(result.expiresIn).toBe(jwtExpiresInSeconds);
 
@@ -248,8 +227,7 @@ describe('AuthService', () => {
         },
       });
 
-      const rotationArgs =
-        mockPrisma.session.updateMany.mock.calls[0][0];
+      const rotationArgs = mockPrisma.session.updateMany.mock.calls[0][0];
 
       expect(rotationArgs.where.id).toBe('session-123');
 
@@ -278,6 +256,199 @@ describe('AuthService', () => {
 
       expect(mockPrisma.session.updateMany).not.toHaveBeenCalled();
       expect(mockJwtService.signAsync).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('logout', () => {
+    it('should revoke the session matching the refresh token', async () => {
+      const refreshToken = 'test-refresh-token';
+
+      mockPrisma.session.updateMany.mockResolvedValue({
+        count: 1,
+      });
+
+      const result = await service.logout(testUser.id, {
+        refreshToken,
+      });
+
+      expect(result.message).toBe('Logout successful');
+
+      expect(mockPrisma.session.updateMany).toHaveBeenCalledWith({
+        where: {
+          userId: testUser.id,
+          refreshTokenHash: hashRefreshToken(refreshToken),
+          revokedAt: null,
+          expiresAt: {
+            gt: expect.any(Date),
+          },
+        },
+        data: {
+          revokedAt: expect.any(Date),
+        },
+      });
+    });
+
+    it('should reject logout when no active session matches', async () => {
+      mockPrisma.session.updateMany.mockResolvedValue({
+        count: 0,
+      });
+
+      await expect(
+        service.logout(testUser.id, {
+          refreshToken: 'invalid-token',
+        }),
+      ).rejects.toThrow(UnauthorizedException);
+    });
+  });
+
+  describe('logoutAll', () => {
+    it('should revoke all active sessions belonging to the user', async () => {
+      mockPrisma.session.updateMany.mockResolvedValue({
+        count: 3,
+      });
+
+      const result = await service.logoutAll(testUser.id);
+
+      expect(result).toEqual({
+        message: 'Logged out from all devices successfully',
+        revokedSessions: 3,
+      });
+
+      expect(mockPrisma.session.updateMany).toHaveBeenCalledWith({
+        where: {
+          userId: testUser.id,
+          revokedAt: null,
+        },
+        data: {
+          revokedAt: expect.any(Date),
+        },
+      });
+    });
+  });
+
+  describe('getActiveSessions', () => {
+    it('should return active sessions and identify the current session', async () => {
+      const now = new Date();
+
+      mockPrisma.session.findMany.mockResolvedValue([
+        {
+          id: 'session-1',
+          createdAt: now,
+          updatedAt: now,
+          expiresAt: new Date(now.getTime() + 86400000),
+        },
+        {
+          id: 'session-2',
+          createdAt: now,
+          updatedAt: now,
+          expiresAt: new Date(now.getTime() + 86400000),
+        },
+      ]);
+
+      const result = await service.getActiveSessions(testUser.id, 'session-1');
+
+      expect(result.sessions).toHaveLength(2);
+
+      expect(result.sessions[0].isCurrentSession).toBe(true);
+      expect(result.sessions[1].isCurrentSession).toBe(false);
+
+      expect(mockPrisma.session.findMany).toHaveBeenCalledWith({
+        where: {
+          userId: testUser.id,
+          revokedAt: null,
+          expiresAt: {
+            gt: expect.any(Date),
+          },
+        },
+        select: {
+          id: true,
+          createdAt: true,
+          updatedAt: true,
+          expiresAt: true,
+        },
+        orderBy: {
+          createdAt: 'desc',
+        },
+      });
+    });
+  });
+
+  describe('revokeSession', () => {
+    it('should revoke an authorized active session', async () => {
+      mockPrisma.session.updateMany.mockResolvedValue({
+        count: 1,
+      });
+
+      const result = await service.revokeSession(testUser.id, 'session-123');
+
+      expect(result.message).toBe('Session revoked successfully');
+
+      expect(mockPrisma.session.updateMany).toHaveBeenCalledWith({
+        where: {
+          id: 'session-123',
+          userId: testUser.id,
+          revokedAt: null,
+          expiresAt: {
+            gt: expect.any(Date),
+          },
+        },
+        data: {
+          revokedAt: expect.any(Date),
+        },
+      });
+    });
+
+    it('should reject revocation when the session is not authorized', async () => {
+      mockPrisma.session.updateMany.mockResolvedValue({
+        count: 0,
+      });
+
+      await expect(
+        service.revokeSession(testUser.id, 'other-user-session'),
+      ).rejects.toThrow(UnauthorizedException);
+
+      expect(mockPrisma.session.updateMany).toHaveBeenCalledWith({
+        where: expect.objectContaining({
+          id: 'other-user-session',
+          userId: testUser.id,
+        }),
+        data: {
+          revokedAt: expect.any(Date),
+        },
+      });
+    });
+  });
+
+  describe('getCurrentUser', () => {
+    it('should return the authenticated user without the password hash', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue({
+        id: testUser.id,
+        email: testUser.email,
+        createdAt: testUser.createdAt,
+      });
+
+      const result = await service.getCurrentUser(testUser.id);
+
+      expect(result.email).toBe(testUser.email);
+
+      expect(mockPrisma.user.findUnique).toHaveBeenCalledWith({
+        where: {
+          id: testUser.id,
+        },
+        select: {
+          id: true,
+          email: true,
+          createdAt: true,
+        },
+      });
+    });
+
+    it('should reject requests for a missing user', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue(null);
+
+      await expect(service.getCurrentUser('missing-user')).rejects.toThrow(
+        UnauthorizedException,
+      );
     });
   });
 });
