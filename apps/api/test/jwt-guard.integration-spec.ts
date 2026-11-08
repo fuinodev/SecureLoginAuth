@@ -282,4 +282,78 @@ describe('JwtAuthGuard PostgreSQL Integration', () => {
     expect(sessionB.userId).toBe(userB.user.id);
     expect(sessionB.revokedAt).toBeNull();
   });
+
+  
+  it('8. should reject a missing authorization header', async () => {
+    const { context } = createContext();
+
+    await expect(
+      guard.canActivate(context),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
+  });
+
+  it('9. should reject an incorrect authorization scheme', async () => {
+    const { accessToken } = await createUserAndSession();
+
+    const { context } = createContext(
+      `Basic ${accessToken}`,
+    );
+
+    await expect(
+      guard.canActivate(context),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
+  });
+
+  it('10. should reject an empty Bearer token', async () => {
+    const { context } = createContext('Bearer ');
+
+    await expect(
+      guard.canActivate(context),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
+  });
+
+  it('11. should reject extra authorization header values', async () => {
+    const { accessToken } = await createUserAndSession();
+
+    const { context } = createContext(
+      `Bearer ${accessToken} unexpected`,
+    );
+
+    await expect(
+      guard.canActivate(context),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
+  });
+
+  it('12. should reject a JWT missing the sub claim', async () => {
+    const { session } = await createUserAndSession();
+
+    const token = await jwtService.signAsync({
+      sid: session.id,
+    });
+
+    const { context } = createContext(
+      `Bearer ${token}`,
+    );
+
+    await expect(
+      guard.canActivate(context),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
+  });
+
+  it('13. should reject a JWT missing the sid claim', async () => {
+    const { user } = await createUserAndSession();
+
+    const token = await jwtService.signAsync({
+      sub: user.id,
+    });
+
+    const { context } = createContext(
+      `Bearer ${token}`,
+    );
+
+    await expect(
+      guard.canActivate(context),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
+  });
+
 });
