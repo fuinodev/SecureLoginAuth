@@ -355,4 +355,116 @@ describe('AuthService PostgreSQL Integration', () => {
     expect(result.createdAt).toBeInstanceOf(Date);
     expect(result).not.toHaveProperty('passwordHash');
   });
+
+  
+  it('11. should reject refresh tokens from expired sessions', async () => {
+    const user = await createUser();
+
+    const login = await authService.login({
+      email: user.email,
+      password,
+    });
+
+    const refreshTokenHash = hashRefreshToken(login.refreshToken);
+
+    await prisma.session.update({
+      where: { refreshTokenHash },
+      data: {
+        expiresAt: new Date(Date.now() - 60_000),
+      },
+    });
+
+    await expect(
+      authService.refreshAccessToken({
+        refreshToken: login.refreshToken,
+      }),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
+
+    const session = await prisma.session.findUniqueOrThrow({
+      where: { refreshTokenHash },
+    });
+
+    expect(session.expiresAt.getTime()).toBeLessThan(Date.now());
+  });
+
+  it('12. should reject refresh tokens from revoked sessions', async () => {
+    const user = await createUser();
+
+    const login = await authService.login({
+      email: user.email,
+      password,
+    });
+
+    const refreshTokenHash = hashRefreshToken(login.refreshToken);
+
+    await prisma.session.update({
+      where: { refreshTokenHash },
+      data: {
+        revokedAt: new Date(),
+      },
+    });
+
+    await expect(
+      authService.refreshAccessToken({
+        refreshToken: login.refreshToken,
+      }),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
+
+    const session = await prisma.session.findUniqueOrThrow({
+      where: { refreshTokenHash },
+    });
+
+    expect(session.revokedAt).toBeInstanceOf(Date);
+  });
+
+  it('13. should prevent revoking another user session', async () => {
+    const userA = await createUser();
+    const userB = await createUser();
+
+    const loginB = await authService.login({
+      email: userB.email,
+      password,
+    });
+
+    const payloadB = await jwtService.verifyAsync<{
+      sid: string;
+    }>(loginB.accessToken);
+
+    await expect(
+      authService.revokeSession(userA.id, payloadB.sid),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
+
+    const sessionB = await prisma.session.findUniqueOrThrow({
+      where: { id: payloadB.sid },
+    });
+
+    expect(sessionB.userId).toBe(userB.id);
+    expect(sessionB.revokedAt).toBeNull();
+  });
+
+  it('14. should prevent logging out another user session', async () => {
+    const userA = await createUser();
+    const userB = await createUser();
+
+    const loginB = await authService.login({
+      email: userB.email,
+      password,
+    });
+
+    await expect(
+      authService.logout(userA.id, {
+        refreshToken: loginB.refreshToken,
+      }),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
+
+    const sessionB = await prisma.session.findUniqueOrThrow({
+      where: {
+        refreshTokenHash: hashRefreshToken(loginB.refreshToken),
+      },
+    });
+
+    expect(sessionB.userId).toBe(userB.id);
+    expect(sessionB.revokedAt).toBeNull();
+  });
+
 });
