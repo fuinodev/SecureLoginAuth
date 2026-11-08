@@ -1,4 +1,3 @@
-
 import { Test, type TestingModule } from '@nestjs/testing';
 import {
   BadRequestException,
@@ -56,20 +55,18 @@ describe('AuthController (e2e)', () => {
   };
 
   beforeAll(async () => {
-    const moduleFixture: TestingModule =
-      await Test.createTestingModule({
-        imports: [AppModule],
-      })
-        .overrideProvider(AuthService)
-        .useValue(mockAuthService)
-        .overrideProvider(PrismaService)
-        .useValue(mockPrismaService)
-        .compile();
+    const moduleFixture: TestingModule = await Test.createTestingModule({
+      imports: [AppModule],
+    })
+      .overrideProvider(AuthService)
+      .useValue(mockAuthService)
+      .overrideProvider(PrismaService)
+      .useValue(mockPrismaService)
+      .compile();
 
-    app =
-      moduleFixture.createNestApplication<NestFastifyApplication>(
-        new FastifyAdapter(),
-      );
+    app = moduleFixture.createNestApplication<NestFastifyApplication>(
+      new FastifyAdapter(),
+    );
 
     app.setGlobalPrefix('api/v1');
 
@@ -111,13 +108,9 @@ describe('AuthController (e2e)', () => {
       });
 
       expect(response.statusCode).toBe(201);
-      expect(response.json().message).toBe(
-        'User registered successfully',
-      );
+      expect(response.json().message).toBe('User registered successfully');
 
-      expect(mockAuthService.register).toHaveBeenCalledWith(
-        validUser,
-      );
+      expect(mockAuthService.register).toHaveBeenCalledWith(validUser);
     });
 
     it('2. should reject invalid registration data', async () => {
@@ -131,9 +124,7 @@ describe('AuthController (e2e)', () => {
       });
 
       expect(response.statusCode).toBe(400);
-      expect(response.json().message).toBe(
-        'Invalid registration data',
-      );
+      expect(response.json().message).toBe('Invalid registration data');
 
       expect(mockAuthService.register).not.toHaveBeenCalled();
     });
@@ -257,6 +248,241 @@ describe('AuthController (e2e)', () => {
       });
 
       expect(response.statusCode).toBe(401);
+    });
+  });
+
+  describe('Refresh token endpoint', () => {
+    it('11. should refresh tokens with valid input', async () => {
+      mockAuthService.refreshAccessToken.mockResolvedValue({
+        accessToken: 'new-access-token',
+        refreshToken: 'new-refresh-token',
+        tokenType: 'Bearer',
+        expiresIn: 900,
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/v1/auth/refresh',
+        payload: {
+          refreshToken: 'valid-refresh-token',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().accessToken).toBe('new-access-token');
+      expect(response.json().refreshToken).toBe('new-refresh-token');
+
+      expect(mockAuthService.refreshAccessToken).toHaveBeenCalledWith({
+        refreshToken: 'valid-refresh-token',
+      });
+    });
+
+    it('12. should reject an empty refresh token', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/v1/auth/refresh',
+        payload: {
+          refreshToken: '',
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(mockAuthService.refreshAccessToken).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('Logout endpoint', () => {
+    it('13. should allow an authenticated user to log out', async () => {
+      mockPrismaService.session.findFirst.mockResolvedValue({
+        id: sessionId,
+      });
+
+      mockAuthService.logout.mockResolvedValue({
+        message: 'Logout successful',
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/v1/auth/logout',
+        headers: {
+          authorization: `Bearer ${createAccessToken()}`,
+        },
+        payload: {
+          refreshToken: 'valid-refresh-token',
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().message).toBe('Logout successful');
+
+      expect(mockAuthService.logout).toHaveBeenCalledWith(userId, {
+        refreshToken: 'valid-refresh-token',
+      });
+    });
+
+    it('14. should reject logout without an access token', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/v1/auth/logout',
+        payload: {
+          refreshToken: 'valid-refresh-token',
+        },
+      });
+
+      expect(response.statusCode).toBe(401);
+      expect(mockAuthService.logout).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('Logout all endpoint', () => {
+    it('15. should log out from all devices', async () => {
+      mockPrismaService.session.findFirst.mockResolvedValue({
+        id: sessionId,
+      });
+
+      mockAuthService.logoutAll.mockResolvedValue({
+        message: 'Logged out from all devices successfully',
+        revokedSessions: 3,
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/v1/auth/logout-all',
+        headers: {
+          authorization: `Bearer ${createAccessToken()}`,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().revokedSessions).toBe(3);
+
+      expect(mockAuthService.logoutAll).toHaveBeenCalledWith(userId);
+    });
+  });
+
+  describe('Active sessions endpoint', () => {
+    it('16. should return the authenticated user sessions', async () => {
+      mockPrismaService.session.findFirst.mockResolvedValue({
+        id: sessionId,
+      });
+
+      mockAuthService.getActiveSessions.mockResolvedValue({
+        sessions: [
+          {
+            id: sessionId,
+            isCurrentSession: true,
+          },
+        ],
+      });
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/api/v1/auth/sessions',
+        headers: {
+          authorization: `Bearer ${createAccessToken()}`,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().sessions).toHaveLength(1);
+
+      expect(mockAuthService.getActiveSessions).toHaveBeenCalledWith(
+        userId,
+        sessionId,
+      );
+    });
+
+    it('17. should reject unauthenticated session listing', async () => {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/api/v1/auth/sessions',
+      });
+
+      expect(response.statusCode).toBe(401);
+      expect(mockAuthService.getActiveSessions).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('Revoke session endpoint', () => {
+    const targetSessionId = '550e8400-e29b-41d4-a716-446655440000';
+
+    it('18. should revoke an authorized session', async () => {
+      mockPrismaService.session.findFirst.mockResolvedValue({
+        id: sessionId,
+      });
+
+      mockAuthService.revokeSession.mockResolvedValue({
+        message: 'Session revoked successfully',
+      });
+
+      const response = await app.inject({
+        method: 'DELETE',
+        url: `/api/v1/auth/sessions/${targetSessionId}`,
+        headers: {
+          authorization: `Bearer ${createAccessToken()}`,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().message).toBe('Session revoked successfully');
+
+      expect(mockAuthService.revokeSession).toHaveBeenCalledWith(
+        userId,
+        targetSessionId,
+      );
+    });
+
+    it('19. should reject an invalid session UUID', async () => {
+      mockPrismaService.session.findFirst.mockResolvedValue({
+        id: sessionId,
+      });
+
+      const response = await app.inject({
+        method: 'DELETE',
+        url: '/api/v1/auth/sessions/not-a-uuid',
+        headers: {
+          authorization: `Bearer ${createAccessToken()}`,
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(mockAuthService.revokeSession).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('Current user endpoint', () => {
+    it('20. should return the authenticated user', async () => {
+      mockPrismaService.session.findFirst.mockResolvedValue({
+        id: sessionId,
+      });
+
+      mockAuthService.getCurrentUser.mockResolvedValue({
+        id: userId,
+        email: validUser.email,
+      });
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/api/v1/auth/me',
+        headers: {
+          authorization: `Bearer ${createAccessToken()}`,
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json().email).toBe(validUser.email);
+
+      expect(mockAuthService.getCurrentUser).toHaveBeenCalledWith(userId);
+    });
+
+    it('21. should reject unauthenticated user requests', async () => {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/api/v1/auth/me',
+      });
+
+      expect(response.statusCode).toBe(401);
+      expect(mockAuthService.getCurrentUser).not.toHaveBeenCalled();
     });
   });
 });
