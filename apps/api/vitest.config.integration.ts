@@ -11,5 +11,9 @@ export default defineConfig({
     root: './',
     include: ['**/*.integration-spec.ts'],
     fileParallelism: false,
+
+    env: {
+      JWT_ACCESS_EXPIRES_IN: '15m',
+    },
   },
 });
