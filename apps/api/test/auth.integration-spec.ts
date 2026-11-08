@@ -465,6 +465,94 @@ describe('AuthService PostgreSQL Integration', () => {
 
     expect(sessionB.userId).toBe(userB.id);
     expect(sessionB.revokedAt).toBeNull();
+  }); 
+
+  
+  it('15. should allow only one concurrent refresh request', async () => {
+    const user = await createUser();
+
+    const login = await authService.login({
+      email: user.email,
+      password,
+    });
+
+    const attempts = await Promise.allSettled([
+      authService.refreshAccessToken({
+        refreshToken: login.refreshToken,
+      }),
+      authService.refreshAccessToken({
+        refreshToken: login.refreshToken,
+      }),
+    ]);
+
+    const successes = attempts.filter(
+      (result) => result.status === 'fulfilled',
+    );
+
+    const failures = attempts.filter(
+      (result) => result.status === 'rejected',
+    );
+
+    expect(successes).toHaveLength(1);
+    expect(failures).toHaveLength(1);
+
+    const failure = failures[0];
+
+    expect(failure?.status).toBe('rejected');
+
+    if (failure?.status === 'rejected') {
+      expect(failure.reason).toBeInstanceOf(
+        UnauthorizedException,
+      );
+    }
+
+    const successfulResult = successes[0];
+
+    if (successfulResult?.status !== 'fulfilled') {
+      throw new Error('Expected one successful refresh');
+    }
+
+    const session = await prisma.session.findUniqueOrThrow({
+      where: {
+        refreshTokenHash: hashRefreshToken(
+          successfulResult.value.refreshToken,
+        ),
+      },
+    });
+
+    expect(session.userId).toBe(user.id);
+    expect(session.revokedAt).toBeNull();
   });
+
+  it('16. should reject reuse of an already rotated refresh token', async () => {
+    const user = await createUser();
+
+    const login = await authService.login({
+      email: user.email,
+      password,
+    });
+
+    const rotated = await authService.refreshAccessToken({
+      refreshToken: login.refreshToken,
+    });
+
+    await expect(
+      authService.refreshAccessToken({
+        refreshToken: login.refreshToken,
+      }),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
+
+    const session = await prisma.session.findUniqueOrThrow({
+      where: {
+        refreshTokenHash: hashRefreshToken(
+          rotated.refreshToken,
+        ),
+      },
+    });
+
+    expect(session.userId).toBe(user.id);
+    expect(session.revokedAt).toBeNull();
+  });
+
 
 });
